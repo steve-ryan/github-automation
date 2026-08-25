@@ -1,91 +1,16 @@
 ```yaml
-name: Add Buy Me a Coffee to Public Repositories
+name: Add Buy Me a Coffee
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: '*/30 * * * *'
 
 jobs:
-  add-funding:
+  funding:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Add FUNDING.yml to public repositories
-        env:
-          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
-          USERNAME: steve-ryan
-          COFFEE_USERNAME: stevewachira
-        run: |
-          set -e
-
-          echo "Checking public repositories..."
-
-          gh repo list "$USERNAME" \
-            --visibility public \
-            --limit 1000 \
-            --json name,isArchived \
-            --jq '.[] | select(.isArchived == false) | .name' > repos.txt
-
-          while IFS= read -r repo; do
-            echo ""
-            echo "Checking: $repo"
-
-            if gh api \
-              "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
-              > funding.json 2>/dev/null; then
-
-              echo "FUNDING.yml exists."
-
-              current_content=$(jq -r '.content' funding.json \
-                | tr -d '\n' \
-                | base64 --decode)
-
-              if echo "$current_content" | grep -q \
-                "buy_me_a_coffee: $COFFEE_USERNAME"; then
-
-                echo "Buy Me a Coffee already configured."
-                continue
-              fi
-
-              echo "Adding Buy Me a Coffee..."
-
-              new_content="${current_content%$'\n'}"
-              new_content="${new_content}"$'\n'"buy_me_a_coffee: $COFFEE_USERNAME"$'\n'
-
-              encoded=$(printf "%s" "$new_content" | base64 -w 0)
-
-              sha=$(jq -r '.sha' funding.json)
-
-              gh api \
-                --method PUT \
-                "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
-                -f message="Add Buy Me a Coffee funding option" \
-                -f content="$encoded" \
-                -f sha="$sha"
-
-              echo "Updated $repo."
-
-            else
-
-              echo "Creating FUNDING.yml..."
-
-              content="buy_me_a_coffee: $COFFEE_USERNAME"$'\n'
-
-              encoded=$(printf "%s" "$content" | base64 -w 0)
-
-              gh api \
-                --method PUT \
-                "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
-                -f message="Add Buy Me a Coffee funding option" \
-                -f content="$encoded"
-
-              echo "Created FUNDING.yml in $repo."
-
-            fi
-
-          done < repos.txt
-
-          echo ""
-          echo "Finished."
+      - name: Test workflow
+        run: echo "Workflow syntax is working"
 ```
