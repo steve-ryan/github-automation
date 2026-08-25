@@ -1,0 +1,100 @@
+```yaml
+name: Add Buy Me a Coffee to Public Repositories
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: "*/30 * * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  add-funding:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Find public repositories and add FUNDING.yml
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+          GITHUB_USERNAME: steve-ryan
+          BUY_ME_A_COFFEE: stevewachira
+        run: |
+          set -e
+
+          echo "Checking public repositories for $GITHUB_USERNAME..."
+
+          repos=$(gh repo list "$GITHUB_USERNAME" \
+            --visibility public \
+            --limit 1000 \
+            --json name,isArchived \
+            --jq '.[] | select(.isArchived == false) | .name')
+
+          for repo in $repos; do
+
+            echo ""
+            echo "Checking $repo..."
+
+            # Check whether FUNDING.yml already exists
+            if gh api \
+              "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
+              --silent > /tmp/funding.json 2>/dev/null; then
+
+              echo "FUNDING.yml already exists."
+
+              current_content=$(jq -r '.content' /tmp/funding.json \
+                | tr -d '\n' \
+                | base64 --decode)
+
+              if echo "$current_content" | grep -q \
+                "buy_me_a_coffee: $BUY_ME_A_COFFEE"; then
+
+                echo "Buy Me a Coffee already configured."
+                continue
+              fi
+
+              echo "Adding Buy Me a Coffee to existing FUNDING.yml..."
+
+              new_content="${current_content%$'\n'}"
+              new_content="${new_content}"$'\n'"buy_me_a_coffee: $BUY_ME_A_COFFEE"$'\n'
+
+              encoded_content=$(printf "%s" "$new_content" | base64 -w 0)
+
+              sha=$(jq -r '.sha' /tmp/funding.json)
+
+              gh api \
+                --method PUT \
+                "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
+                -f message="Add Buy Me a Coffee funding option" \
+                -f content="$encoded_content" \
+                -f sha="$sha"
+
+              echo "Updated $repo."
+
+            else
+
+              echo "Creating FUNDING.yml..."
+
+              content="# Funding configuration for $GITHUB_USERNAME
+          buy_me_a_coffee: $BUY_ME_A_COFFEE
+          "
+
+              encoded_content=$(printf "%s" "$content" | base64 -w 0)
+
+              gh api \
+                --method PUT \
+                "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
+                -f message="Add Buy Me a Coffee funding option" \
+                -f content="$encoded_content"
+
+              echo "Added funding configuration to $repo."
+
+            fi
+
+          done
+
+          echo ""
+          echo "Finished checking repositories."
+```
