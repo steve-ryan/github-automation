@@ -2,73 +2,66 @@
 name: Add Buy Me a Coffee to Public Repositories
 
 on:
-  schedule:
-    # Run every 30 minutes
-    - cron: "*/30 * * * *"
-
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: "*/30 * * * *"
 
 jobs:
   add-funding:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Find public repositories and add FUNDING.yml
+      - name: Add FUNDING.yml to public repositories
         env:
           GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
-          GITHUB_USERNAME: steve-ryan
-          BUY_ME_A_COFFEE: stevewachira
+          USERNAME: steve-ryan
+          COFFEE_USERNAME: stevewachira
         run: |
           set -e
 
-          echo "Checking public repositories for $GITHUB_USERNAME..."
+          echo "Checking public repositories..."
 
-          repos=$(gh repo list "$GITHUB_USERNAME" \
+          gh repo list "$USERNAME" \
             --visibility public \
             --limit 1000 \
             --json name,isArchived \
-            --jq '.[] | select(.isArchived == false) | .name')
+            --jq '.[] | select(.isArchived == false) | .name' > repos.txt
 
-          for repo in $repos; do
-
+          while IFS= read -r repo; do
             echo ""
-            echo "Checking $repo..."
+            echo "Checking: $repo"
 
-            # Check whether FUNDING.yml already exists
             if gh api \
-              "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
-              --silent > /tmp/funding.json 2>/dev/null; then
+              "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
+              > funding.json 2>/dev/null; then
 
-              echo "FUNDING.yml already exists."
+              echo "FUNDING.yml exists."
 
-              current_content=$(jq -r '.content' /tmp/funding.json \
+              current_content=$(jq -r '.content' funding.json \
                 | tr -d '\n' \
                 | base64 --decode)
 
               if echo "$current_content" | grep -q \
-                "buy_me_a_coffee: $BUY_ME_A_COFFEE"; then
+                "buy_me_a_coffee: $COFFEE_USERNAME"; then
 
                 echo "Buy Me a Coffee already configured."
                 continue
               fi
 
-              echo "Adding Buy Me a Coffee to existing FUNDING.yml..."
+              echo "Adding Buy Me a Coffee..."
 
               new_content="${current_content%$'\n'}"
-              new_content="${new_content}"$'\n'"buy_me_a_coffee: $BUY_ME_A_COFFEE"$'\n'
+              new_content="${new_content}"$'\n'"buy_me_a_coffee: $COFFEE_USERNAME"$'\n'
 
-              encoded_content=$(printf "%s" "$new_content" | base64 -w 0)
+              encoded=$(printf "%s" "$new_content" | base64 -w 0)
 
-              sha=$(jq -r '.sha' /tmp/funding.json)
+              sha=$(jq -r '.sha' funding.json)
 
               gh api \
                 --method PUT \
-                "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
+                "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
                 -f message="Add Buy Me a Coffee funding option" \
-                -f content="$encoded_content" \
+                -f content="$encoded" \
                 -f sha="$sha"
 
               echo "Updated $repo."
@@ -77,24 +70,22 @@ jobs:
 
               echo "Creating FUNDING.yml..."
 
-              content="# Funding configuration for $GITHUB_USERNAME
-          buy_me_a_coffee: $BUY_ME_A_COFFEE
-          "
+              content="buy_me_a_coffee: $COFFEE_USERNAME"$'\n'
 
-              encoded_content=$(printf "%s" "$content" | base64 -w 0)
+              encoded=$(printf "%s" "$content" | base64 -w 0)
 
               gh api \
                 --method PUT \
-                "repos/$GITHUB_USERNAME/$repo/contents/.github/FUNDING.yml" \
+                "repos/$USERNAME/$repo/contents/.github/FUNDING.yml" \
                 -f message="Add Buy Me a Coffee funding option" \
-                -f content="$encoded_content"
+                -f content="$encoded"
 
-              echo "Added funding configuration to $repo."
+              echo "Created FUNDING.yml in $repo."
 
             fi
 
-          done
+          done < repos.txt
 
           echo ""
-          echo "Finished checking repositories."
+          echo "Finished."
 ```
